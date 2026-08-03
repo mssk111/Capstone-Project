@@ -19,7 +19,6 @@ This platform solves those challenges by providing a centralized, secure, and ve
 * **AI-Assisted Listing Creation:** Upload item photos to automatically suggest pricing and product descriptions, with manual editing controls.
 * **Campus-Focused Search & Filtering:** Filter listings by category, price range, item condition, and specific campus pickup locations (e.g., *North Campus*, *South Campus*, *Norris University Center*).
 * **In-App Direct Messaging:** Secure buyer-seller communication and price offers without sharing personal phone numbers or social media handles.
-* **Watchlist & Price Drop Alerts:** Save target listings to receive real-time updates when prices drop.
 
 ### 🛡️ Admin & Moderation Tools
 * **User & Content Moderation:** Central panel for administrators to review flagged items, issue warnings, or ban users who violate community guidelines.
