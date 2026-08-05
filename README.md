@@ -23,7 +23,6 @@ This platform solves those challenges by providing a centralized, secure, and ve
 ### 🛡️ Admin & Moderation Tools
 * **User & Content Moderation:** Central panel for administrators to review flagged items, issue warnings, or ban users who violate community guidelines.
 * **Report Queue:** Dedicated interface to process user reports regarding spam, scams, or harassment.
-* **Dynamic Taxonomy:** Dynamic management of marketplace categories to adapt to seasonal needs (e.g., adding *Sublets* prior to summer).
 * **Platform Analytics:** Real-time dashboards tracking active users, total listings, popular search terms, and completed transactions.
 
 ---
