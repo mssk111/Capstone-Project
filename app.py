@@ -17,6 +17,12 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 
+@app.get("/api/health")
+async def health():
+    """Lightweight readiness check that does not require Supabase credentials."""
+    return {"status": "ok", "service": "nu-secondhand-api"}
+
+
 async def require_admin(authorization: Optional[str] = Header(default=None)):
     """Verify the caller's Supabase JWT before using the service role database key."""
     if not authorization or not authorization.startswith("Bearer ") or not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:

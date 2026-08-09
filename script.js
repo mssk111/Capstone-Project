@@ -157,7 +157,6 @@ function normalizeChat(chat) {
 function normalizeUser(user) {
   return {
     username: user.username || "",
-    password: user.password || "",
     savedItems: Array.isArray(user.savedItems) ? user.savedItems.map(Number) : [],
     status: ["active", "warned", "banned"].includes(user.status) ? user.status : "active",
   };
@@ -1075,10 +1074,15 @@ async function deleteItem(itemId) {
   const confirmed = confirm("Are you sure you want to permanently delete this listing?");
   if (!confirmed) return;
 
-  await deleteListingFromSupabase(itemId);
-  await loadListingsFromSupabase();
-  state.view = "profile";
-  render();
+  try {
+    await deleteListingFromSupabase(itemId);
+    await loadListingsFromSupabase();
+    state.view = "profile";
+    render();
+  } catch (error) {
+    console.error("Listing delete failed:", error);
+    alert("Unable to delete listing. Please try again.");
+  }
 }
 
 function buildChatId(buyer, seller, itemId) {
@@ -1256,46 +1260,50 @@ function readUploadedImage(file) {
   });
 }
 
-async function uploadListingImageToStorage(file) {
+async function compressListingImageForDatabase(file, maxDimension = 960, quality = 0.68) {
   if (!file) return "";
+
   try {
-    if (!state.listingImagesBucketReady) await initializeListingImagesBucket();
-    if (!state.listingImagesBucketReady) throw new Error("Supabase Storage is unavailable.");
-
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-    const path = `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
-    const { error: uploadError } = await supabaseClient.storage
-      .from("listing-images")
-      .upload(path, file, { contentType: file.type, upsert: false });
-    if (uploadError) throw uploadError;
-
-    const { data } = supabaseClient.storage.from("listing-images").getPublicUrl(path);
-    if (!data?.publicUrl) throw new Error("The uploaded image does not have a public URL.");
-    return data.publicUrl;
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image compression is unavailable.");
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+    return canvas.toDataURL("image/webp", quality);
   } catch (error) {
-    console.warn("Supabase Storage upload failed; saving a local image data URL instead:", error);
+    console.warn("Image compression failed; using the original image data:", error);
     return readUploadedImage(file);
   }
 }
 
+async function uploadListingImageToStorage(file) {
+  if (!file) return "";
+  if (!state.listingImagesBucketReady) await initializeListingImagesBucket();
+  if (!state.listingImagesBucketReady) {
+    throw new Error("Image storage is not configured. Ask an administrator to create the listing-images bucket.");
+  }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const path = `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+  const { error: uploadError } = await supabaseClient.storage
+    .from("listing-images")
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (uploadError) throw uploadError;
+
+  const { data } = supabaseClient.storage.from("listing-images").getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error("The uploaded image does not have a public URL.");
+  return data.publicUrl;
+}
+
 async function initializeListingImagesBucket() {
-  if (!supabaseClient?.storage) return false;
-
-  const { error: bucketError } = await supabaseClient.storage.getBucket("listing-images");
-  if (!bucketError) {
-    state.listingImagesBucketReady = true;
-    return true;
-  }
-
-  const { error: createError } = await supabaseClient.storage.createBucket("listing-images", { public: true });
-  if (createError) {
-    console.warn("Could not initialize the listing-images bucket:", createError.message || createError);
-    state.listingImagesBucketReady = false;
-    return false;
-  }
-
-  state.listingImagesBucketReady = true;
-  return true;
+  // Bucket creation and inspection require elevated privileges. The browser only
+  // attempts an upload; administrators create `listing-images` once in Supabase.
+  state.listingImagesBucketReady = Boolean(supabaseClient?.storage);
+  return state.listingImagesBucketReady;
 }
 
 function buildSupabaseEmail(username) {
@@ -1317,8 +1325,7 @@ async function syncSignupToSupabase({ username, password }) {
   });
 
   if (authError) {
-    console.warn("Supabase signup failed:", authError.message);
-    return;
+    throw authError;
   }
 
   const { error: profileError } = await supabaseClient.from("student_profiles").upsert(
@@ -1333,8 +1340,10 @@ async function syncSignupToSupabase({ username, password }) {
   );
 
   if (profileError) {
-    console.warn("Supabase profile upsert failed:", profileError.message);
+    throw profileError;
   }
+
+  return authData.user;
 }
 
 async function syncChatToSupabase(itemId, buyer, seller) {
@@ -1565,11 +1574,15 @@ async function insertListingIntoSupabase(item) {
 }
 
 async function insertListingsIntoSupabase(items) {
-  if (!supabaseClient) return;
+  if (!supabaseClient) throw new Error("Supabase is unavailable.");
 
-  const { data: sessionData } = await supabaseClient.auth.getUser();
-  const { error } = await supabaseClient.from("item_listings").insert(items.map((item) => ({
-    seller_auth_user_id: sessionData.user?.id || null,
+  const { data: sessionData, error: sessionError } = await supabaseClient.auth.getUser();
+  if (sessionError || !sessionData?.user) {
+    throw new Error("Your session has expired. Please log in again.");
+  }
+
+  const { data, error } = await supabaseClient.from("item_listings").insert(items.map((item) => ({
+    seller_auth_user_id: sessionData.user.id,
     seller_username: item.seller,
     local_item_id: String(item.id),
     title: item.title,
@@ -1580,17 +1593,23 @@ async function insertListingsIntoSupabase(items) {
     pickup_location: item.locations.join(", "),
     image_url: item.image,
     active: item.active,
-  })));
+  }))).select("local_item_id");
 
   if (error) {
     throw error;
   }
+  if (!data || data.length !== items.length) {
+    throw new Error("The listing was not saved. Check database permissions.");
+  }
+
+  return data;
 }
 
 async function updateListingInSupabase(item) {
-  if (!supabaseClient) return;
+  if (!supabaseClient) throw new Error("Supabase is unavailable.");
 
-  const { error } = await supabaseClient
+  const username = getCurrentUsername();
+  const { data, error } = await supabaseClient
     .from("item_listings")
     .update({
       title: item.title,
@@ -1601,25 +1620,34 @@ async function updateListingInSupabase(item) {
       pickup_location: item.locations.join(", "),
       image_url: item.image_url || item.image_path || item.image,
     })
-    .eq("local_item_id", String(item.id));
+    .eq("local_item_id", String(item.id))
+    .eq("seller_username", username)
+    .select("local_item_id");
 
   if (error) {
-    console.warn("Supabase listing update failed:", error.message);
+    throw error;
+  }
+  if (!data?.length) {
+    throw new Error("The listing was not updated. Check ownership and row-level security policies.");
   }
 }
 
 async function deleteListingFromSupabase(itemId) {
-  if (!supabaseClient) return;
+  if (!supabaseClient) throw new Error("Supabase is unavailable.");
 
   const username = getCurrentUsername();
-  const { error } = await supabaseClient
+  const { data, error } = await supabaseClient
     .from("item_listings")
     .delete()
     .eq("local_item_id", String(itemId))
-    .eq("seller_username", username);
+    .eq("seller_username", username)
+    .select("local_item_id");
 
   if (error) {
-    console.warn("Supabase listing delete failed:", error.message);
+    throw error;
+  }
+  if (!data?.length) {
+    throw new Error("The listing was not deleted. Check ownership and row-level security policies.");
   }
 }
 
@@ -1863,7 +1891,7 @@ loginForm.addEventListener("submit", async (event) => {
     const signedInUsername = authenticatedUser.user_metadata?.username || username;
     const users = getUsers();
     if (!users.some((user) => user.username === signedInUsername)) {
-      users.push({ username: signedInUsername, password, savedItems: [] });
+      users.push({ username: signedInUsername, savedItems: [] });
       saveUsers(users);
     }
 
@@ -1904,14 +1932,17 @@ signupForm.addEventListener("submit", async (event) => {
     return;
   }
 
-  users.push({ username, password, savedItems: [] });
-  saveUsers(users);
-  await syncSignupToSupabase({ username, password }).catch((error) => {
-    console.warn("Supabase background signup failed:", error);
-  });
-  signupForm.reset();
-  authDialog.close();
-  await setCurrentUser(username);
+  try {
+    await syncSignupToSupabase({ username, password });
+    users.push({ username, savedItems: [] });
+    saveUsers(users);
+    signupForm.reset();
+    authDialog.close();
+    await setCurrentUser(username);
+  } catch (error) {
+    console.error("Signup Error:", error);
+    signupMessage.textContent = error.message || "Unable to create the account. Please try again.";
+  }
 });
 
 document.querySelector("#searchForm").addEventListener("submit", (event) => {
@@ -2247,6 +2278,7 @@ sellForm.addEventListener("submit", async (event) => {
   }
 
   if (state.aiListingDrafts.length && !state.editingItemId) {
+    const manualImageUrl = document.querySelector("#itemImageUrl").value.trim();
     const listings = state.aiListingDrafts.map((draft, index) => ({
       id: `${Date.now()}${index}`,
       title: draft.title.trim(),
@@ -2254,7 +2286,7 @@ sellForm.addEventListener("submit", async (event) => {
       category: draft.category,
       condition: draft.condition,
       description: draft.description,
-      image: draft.image || FALLBACK_IMAGE_URL,
+      image: manualImageUrl || FALLBACK_IMAGE_URL,
       seller: getCurrentUsername(),
       locations,
       active: true,
@@ -2264,20 +2296,41 @@ sellForm.addEventListener("submit", async (event) => {
       aiStatus.textContent = "Each detected item needs a title and valid suggested price before publishing.";
       return;
     }
+
+    let publishSucceeded = false;
+    sellSubmitButton.disabled = true;
+    sellSubmitButton.textContent = `Publishing ${listings.length}...`;
     try {
-      const uploadedImageUrls = await Promise.all(
-        state.selectedImageFiles.map((file) => uploadListingImageToStorage(file))
-      );
+      let uploadedImageUrls = [];
+      let embeddedImageUrls = [];
+      try {
+        uploadedImageUrls = await Promise.all(
+          state.selectedImageFiles.map((file) => uploadListingImageToStorage(file))
+        );
+      } catch (error) {
+        console.warn("Listing photo upload failed; saving compressed images with the listing:", error);
+        embeddedImageUrls = await Promise.all(
+          state.selectedImageFiles.map((file) => compressListingImageForDatabase(file))
+        );
+      }
       listings.forEach((listing, index) => {
-        listing.image = uploadedImageUrls[state.aiListingDrafts[index].sourceImageIndex] || listing.image;
+        const imageIndex = state.aiListingDrafts[index].sourceImageIndex;
+        listing.image = uploadedImageUrls[imageIndex] || embeddedImageUrls[imageIndex] || listing.image;
       });
       await insertListingsIntoSupabase(listings);
       await loadListingsFromSupabase();
+      publishSucceeded = true;
     } catch (error) {
       console.error("Bulk listing submission failed:", error);
-      aiStatus.textContent = error.message || "Could not publish the detected listings. Please try again.";
-      return;
+      const message = "Unable to publish listing. Please try again.";
+      aiStatus.textContent = `${message} ${error.message || ""}`.trim();
+      alert(message);
+    } finally {
+      sellSubmitButton.disabled = false;
+      if (!publishSucceeded) renderAiListingDrafts();
     }
+
+    if (!publishSucceeded) return;
 
     sellDialog.close();
     state.aiListingDrafts = [];
@@ -2296,71 +2349,93 @@ sellForm.addEventListener("submit", async (event) => {
   const description = document.querySelector("#description-textarea").value.trim();
   const imageUrl = document.querySelector("#itemImageUrl").value.trim();
   const imageFile = state.selectedImageFile || sellImageFile.files[0];
-  if (!title || Number.isNaN(price) || !category || !condition) return;
-
-  let uploadedImage = "";
-  try {
-    uploadedImage = await uploadListingImageToStorage(imageFile);
-  } catch (error) {
-    console.error("Listing image upload failed:", error);
-    alert("The selected image could not be uploaded. Please try a different file.");
+  if (!title || Number.isNaN(price) || !category || !condition) {
+    aiStatus.textContent = "Complete the title, price, category, and condition before publishing.";
     return;
   }
 
-  const image = uploadedImage || imageUrl || FALLBACK_IMAGE_URL;
-  const items = getItems();
-  const editingItem = items.find((item) => Number(item.id) === Number(state.editingItemId));
+  const wasEditing = Boolean(state.editingItemId);
+  sellSubmitButton.disabled = true;
+  sellSubmitButton.textContent = wasEditing ? "Saving..." : "Publishing...";
 
-  if (editingItem && editingItem.seller === getCurrentUsername()) {
-    editingItem.title = title;
-    editingItem.price = price;
-    editingItem.category = category;
-    editingItem.condition = condition;
-    editingItem.description = description;
-    editingItem.image = uploadedImage || imageUrl || state.originalImageUrl || editingItem.image;
-    editingItem.image_url = uploadedImage || imageUrl || state.originalImageUrl || editingItem.image_url || editingItem.image_path || editingItem.image;
-    editingItem.locations = locations;
-    await updateListingInSupabase(editingItem);
-    saveChats(
-      getChats().map((chat) =>
-        Number(chat.itemId) === Number(editingItem.id) ? { ...chat, itemTitle: title } : chat
-      )
-    );
-  } else {
-    const newItem = {
-      id: Date.now(),
-      title,
-      price,
-      category,
-      condition,
-      description,
-      image,
-      seller: getCurrentUsername(),
-      locations,
-      active: true,
-      saved: false,
-    };
-    await insertListingIntoSupabase(newItem);
+  try {
+    let uploadedImage = "";
+    let embeddedImage = "";
+    try {
+      uploadedImage = await uploadListingImageToStorage(imageFile);
+    } catch (error) {
+      console.warn("Listing photo upload failed; saving a compressed image with the listing:", error);
+      embeddedImage = await compressListingImageForDatabase(imageFile);
+    }
+
+    const image = uploadedImage || embeddedImage || imageUrl || FALLBACK_IMAGE_URL;
+    const items = getItems();
+    const editingItem = items.find((item) => Number(item.id) === Number(state.editingItemId));
+
+    if (editingItem && editingItem.seller === getCurrentUsername()) {
+      editingItem.title = title;
+      editingItem.price = price;
+      editingItem.category = category;
+      editingItem.condition = condition;
+      editingItem.description = description;
+      editingItem.image = uploadedImage || embeddedImage || imageUrl || state.originalImageUrl || editingItem.image;
+      editingItem.image_url = uploadedImage || embeddedImage || imageUrl || state.originalImageUrl || editingItem.image_url || editingItem.image_path || editingItem.image;
+      editingItem.locations = locations;
+      await updateListingInSupabase(editingItem);
+      saveChats(
+        getChats().map((chat) =>
+          Number(chat.itemId) === Number(editingItem.id) ? { ...chat, itemTitle: title } : chat
+        )
+      );
+    } else {
+      const newItem = {
+        id: Date.now(),
+        title,
+        price,
+        category,
+        condition,
+        description,
+        image,
+        seller: getCurrentUsername(),
+        locations,
+        active: true,
+        saved: false,
+      };
+      await insertListingIntoSupabase(newItem);
+    }
+
+    await loadListingsFromSupabase();
+    sellDialog.close();
+    state.view = state.editingItemId ? "profile" : "market";
+    state.query = "";
+    state.category = "all";
+    state.maxPrice = Math.max(250, price);
+    searchInput.value = "";
+    categoryFilter.value = "all";
+    maxPrice.max = String(state.maxPrice);
+    maxPrice.value = String(state.maxPrice);
+    priceValue.textContent = `$${state.maxPrice}`;
+    state.editingItemId = null;
+    clearImageUploadState();
+    state.aiListingDrafts = [];
+    sellForm.reset();
+    renderAiListingDrafts();
+    render();
+    document.querySelector("#market").scrollIntoView({ behavior: "smooth" });
+  } catch (error) {
+    console.error(wasEditing ? "Listing update failed:" : "Listing submission failed:", error);
+    const message = wasEditing
+      ? "Unable to update listing. Please try again."
+      : "Unable to publish listing. Please try again.";
+    aiStatus.textContent = `${message} ${error.message || ""}`.trim();
+    alert(message);
+  } finally {
+    sellSubmitButton.disabled = false;
+    sellSubmitButton.innerHTML = wasEditing
+      ? '<i data-lucide="save"></i>Save changes'
+      : '<i data-lucide="plus"></i>Add listing';
+    refreshIcons();
   }
-
-  await loadListingsFromSupabase();
-  sellDialog.close();
-  state.view = state.editingItemId ? "profile" : "market";
-  state.query = "";
-  state.category = "all";
-  state.maxPrice = Math.max(250, price);
-  searchInput.value = "";
-  categoryFilter.value = "all";
-  maxPrice.max = String(state.maxPrice);
-  maxPrice.value = String(state.maxPrice);
-  priceValue.textContent = `$${state.maxPrice}`;
-  state.editingItemId = null;
-  clearImageUploadState();
-  state.aiListingDrafts = [];
-  sellForm.reset();
-  renderAiListingDrafts();
-  render();
-  document.querySelector("#market").scrollIntoView({ behavior: "smooth" });
 });
 
 async function initializeApp() {

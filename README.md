@@ -78,6 +78,42 @@ Capstone Project/
 
 ---
 
-## 👤 Author
+## 👥 Team
 
-* **Tom Wang** — Northwestern University Capstone Project
+* **Wenguan Cao**
+* **Tom Wang**
+* **Ouyang Jian**
+
+---
+
+## Verification
+
+Install the Python dependencies and run the API tests before a dry run:
+
+```bash
+python -m pip install -r requirements.txt
+python -m pytest -q
+```
+
+The test suite verifies the public health endpoint, report validation, and the
+admin authorization boundary without requiring live Supabase credentials.
+
+### Sell-form behavior
+
+The current Sell form writes listings through Supabase and confirms that the
+database returned the inserted row. While publishing, the submit button is
+disabled and shows `Publishing...`. If authentication, row-level security, or
+network access blocks the write, the form now keeps the entered values and
+shows `Unable to publish listing. Please try again.` instead of failing only in
+the browser console.
+
+If the optional `listing-images` storage bucket or upload policy is unavailable,
+the browser compresses the selected photo and saves it with the listing record.
+This keeps the uploaded product photo visible without blocking publication or
+showing a misleading failure dialog.
+
+## Supabase Storage setup
+
+Create a public bucket named `listing-images` once in the Supabase dashboard
+and apply an authenticated upload policy appropriate for the project. The web
+client never creates or administers buckets; it only uploads listing images.

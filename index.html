@@ -10,7 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=m4-fixes-5" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body>
@@ -285,7 +285,7 @@
       </div>
     </dialog>
 
-    <!-- Sell modal: submissions are stored in localStorage as mock backend data. -->
+    <!-- Sell modal: submissions are persisted through the Supabase REST API. -->
     <dialog class="listing-dialog sell-dialog" id="sellDialog">
       <button class="icon-button close-sell-dialog" type="button" aria-label="Close sell form" title="Close">
         <i data-lucide="x"></i>
@@ -416,6 +416,6 @@
     </dialog>
 
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script src="script.js"></script>
+    <script src="script.js?v=m4-fixes-5"></script>
   </body>
 </html>
