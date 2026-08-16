@@ -339,29 +339,40 @@
           <option>Fair</option>
         </select>
 
-        <label for="description-textarea">Description</label>
-        <textarea id="description-textarea" rows="3" placeholder="Add details for buyers."></textarea>
-
         <label for="itemImageUrl">Image URL</label>
         <input type="url" id="itemImageUrl" placeholder="https://example.com/photo.jpg" />
 
         <fieldset class="location-fieldset">
           <legend>Preferred Transaction Location (Select all that apply):</legend>
-          <label class="check-row">
-            <input type="checkbox" name="transactionLocation" value="Evanston Main Campus (North/South)" />
-            <span>Evanston Main Campus (North/South)</span>
-          </label>
-          <label class="check-row">
-            <input type="checkbox" name="transactionLocation" value="Norris University Center (Evanston)" />
-            <span>Norris University Center (Evanston)</span>
-          </label>
-          <label class="check-row">
-            <input type="checkbox" name="transactionLocation" value="Chicago Downtown Campus (Streeterville)" />
-            <span>Chicago Downtown Campus (Streeterville)</span>
-          </label>
-          <label class="check-row">
-            <input type="checkbox" name="transactionLocation" value="Northwestern Memorial Hospital Hub" />
-            <span>Northwestern Memorial Hospital Hub</span>
+          <div class="location-group">
+            <p class="location-subtitle">Evanston Campus</p>
+            <label class="check-row">
+              <input type="checkbox" name="transactionLocation" value="Evanston Main Campus (North/South)" />
+              <span>Evanston Main Campus (North/South)</span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" name="transactionLocation" value="Norris University Center (Evanston)" />
+              <span>Norris University Center (Evanston)</span>
+            </label>
+          </div>
+          <div class="location-group">
+            <p class="location-subtitle">Downtown Campus</p>
+            <label class="check-row">
+              <input type="checkbox" name="transactionLocation" value="Chicago Downtown Campus (Streeterville)" />
+              <span>Chicago Downtown Campus (Streeterville)</span>
+            </label>
+            <label class="check-row">
+              <input type="checkbox" name="transactionLocation" value="Northwestern Memorial Hospital Hub" />
+              <span>Northwestern Memorial Hospital Hub</span>
+            </label>
+          </div>
+          <label class="custom-location-field" for="custom-location-input">
+            <span>Other / Custom Location</span>
+            <input
+              type="text"
+              id="custom-location-input"
+              placeholder="e.g., Off-campus apartment, Coffee shop..."
+            />
           </label>
         </fieldset>
 

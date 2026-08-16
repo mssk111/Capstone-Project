@@ -428,16 +428,23 @@ function renderLocationChips(locations) {
 }
 
 function getSelectedLocations() {
-  return Array.from(document.querySelectorAll('input[name="transactionLocation"]:checked')).map(
+  const selectedLocations = Array.from(document.querySelectorAll('input[name="transactionLocation"]:checked')).map(
     (checkbox) => checkbox.value
   );
+  const customLocation = document.querySelector("#custom-location-input").value.trim();
+  return customLocation ? [...selectedLocations, customLocation] : selectedLocations;
 }
 
 function setSelectedLocations(locations) {
   const selected = new Set(locations);
-  document.querySelectorAll('input[name="transactionLocation"]').forEach((checkbox) => {
+  const locationCheckboxes = document.querySelectorAll('input[name="transactionLocation"]');
+  locationCheckboxes.forEach((checkbox) => {
     checkbox.checked = selected.has(checkbox.value);
   });
+  const standardLocations = new Set(Array.from(locationCheckboxes, (checkbox) => checkbox.value));
+  document.querySelector("#custom-location-input").value = locations
+    .filter((location) => !standardLocations.has(location))
+    .join(", ");
 }
 
 function getCurrentUserChats() {
@@ -1025,7 +1032,6 @@ function openEditModal(item) {
   const priceInput = document.querySelector("#price-input");
   const categorySelect = document.querySelector("#category-select");
   const conditionSelect = document.querySelector("#condition-select");
-  const descriptionInput = document.querySelector("#description-textarea");
   const imageUrlInput = document.querySelector("#itemImageUrl");
   const existingImageUrl = item.image_url || item.image_path || item.image || "";
 
@@ -1040,7 +1046,6 @@ function openEditModal(item) {
   sellModalEyebrow.textContent = "Edit listing";
   sellModalTitle.textContent = "Update item";
   sellSubmitButton.innerHTML = '<i data-lucide="save"></i>Save changes';
-  descriptionInput.value = item.description || "";
   titleInput.value = item.title || "";
   priceInput.value = item.suggested_price || item.price || "";
   categorySelect.value = item.category || "Dorm";
@@ -1739,15 +1744,11 @@ function renderAiListingDrafts() {
       <label>Category<select data-ai-draft-field="category">${state.categories.map((category) => `<option ${category.name === draft.category ? "selected" : ""}>${escapeHtml(category.name)}</option>`).join("")}</select></label>
       <label>Suggested price<input data-ai-draft-field="suggested_price" type="number" min="0" step="1" value="${draft.suggested_price}" required></label>
       <label>Condition<select data-ai-draft-field="condition">${["New", "Like New", "Good", "Used", "Fair"].map((condition) => `<option ${condition === draft.condition ? "selected" : ""}>${condition}</option>`).join("")}</select></label>
-      <label>Description<textarea data-ai-draft-field="description" rows="2">${escapeHtml(draft.description)}</textarea></label>
     </article>`).join("");
-  aiListingDrafts.querySelectorAll('[data-ai-draft-field="description"]').forEach((textarea, index) => {
-    textarea.value = drafts[index].description;
-  });
   const activeDraft = drafts.find((draft) => draft.id === state.activeAiDraftId);
   if (activeDraft) applyDraftToListing(activeDraft);
   sellSubmitButton.innerHTML = drafts.length ? `<i data-lucide="upload"></i>Publish ${drafts.length} listing${drafts.length === 1 ? "" : "s"}` : '<i data-lucide="plus"></i>Add listing';
-  ["#title-input", "#price-input", "#category-select", "#condition-select", "#description-textarea", "#itemImageUrl"].forEach((selector) => {
+  ["#title-input", "#price-input", "#category-select", "#condition-select", "#itemImageUrl"].forEach((selector) => {
     const field = document.querySelector(selector);
     field.disabled = drafts.length > 0;
     if (["#title-input", "#price-input", "#category-select", "#condition-select"].includes(selector)) field.required = drafts.length === 0;
@@ -1760,7 +1761,6 @@ function applyDraftToListing(draft) {
   document.querySelector("#price-input").value = draft.suggested_price;
   document.querySelector("#category-select").value = draft.category;
   document.querySelector("#condition-select").value = draft.condition;
-  document.querySelector("#description-textarea").value = draft.description;
   state.activeAiDraftId = draft.id;
 }
 
@@ -2346,7 +2346,6 @@ sellForm.addEventListener("submit", async (event) => {
   const price = Number(document.querySelector("#price-input").value);
   const category = document.querySelector("#category-select").value;
   const condition = document.querySelector("#condition-select").value;
-  const description = document.querySelector("#description-textarea").value.trim();
   const imageUrl = document.querySelector("#itemImageUrl").value.trim();
   const imageFile = state.selectedImageFile || sellImageFile.files[0];
   if (!title || Number.isNaN(price) || !category || !condition) {
@@ -2377,7 +2376,6 @@ sellForm.addEventListener("submit", async (event) => {
       editingItem.price = price;
       editingItem.category = category;
       editingItem.condition = condition;
-      editingItem.description = description;
       editingItem.image = uploadedImage || embeddedImage || imageUrl || state.originalImageUrl || editingItem.image;
       editingItem.image_url = uploadedImage || embeddedImage || imageUrl || state.originalImageUrl || editingItem.image_url || editingItem.image_path || editingItem.image;
       editingItem.locations = locations;
@@ -2394,7 +2392,6 @@ sellForm.addEventListener("submit", async (event) => {
         price,
         category,
         condition,
-        description,
         image,
         seller: getCurrentUsername(),
         locations,

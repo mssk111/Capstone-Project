@@ -757,6 +757,24 @@ img {
   padding: 0 6px;
 }
 
+.location-group {
+  display: grid;
+  gap: 8px;
+}
+
+.location-subtitle {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.custom-location-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+}
+
 .ai-status {
   min-height: 20px;
   margin: 0;
