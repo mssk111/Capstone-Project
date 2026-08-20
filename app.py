@@ -164,3 +164,12 @@ async def analytics():
     metrics = await db("GET", "platform_analytics")
     terms = await db("GET", "top_search_terms")
     return {**(metrics[0] if metrics else {}), "top_search_terms": terms}
+
+
+ENABLE_EXTERNAL_AI_VALUATION = False  # Set to True to enable GPT-4o + eBay Pipeline
+
+if ENABLE_EXTERNAL_AI_VALUATION:
+    from services.ai_vision_service import VisionMarketEvaluator
+    ai_evaluator = VisionMarketEvaluator()
+else:
+    ai_evaluator = None  # Disabled: Code exists in repository but remains unexecuted

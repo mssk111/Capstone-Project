@@ -1798,7 +1798,9 @@ async function runVisionAutoFill(files) {
   if (!files.length) return;
   aiStatus.textContent = "AI is analyzing your photo set…";
   sellForm.classList.add("ai-analyzing");
+  sellForm.setAttribute("aria-busy", "true");
   try {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     state.aiListingDrafts = await analyzeListingImages(files);
     renderAiListingDrafts();
     aiStatus.textContent = `${state.aiListingDrafts.length} item${state.aiListingDrafts.length === 1 ? "" : "s"} detected. Review each draft before publishing.`;
@@ -1809,6 +1811,7 @@ async function runVisionAutoFill(files) {
     aiStatus.textContent = error.message || "Image analysis could not be completed. You can still enter one listing manually.";
   } finally {
     sellForm.classList.remove("ai-analyzing");
+    sellForm.removeAttribute("aria-busy");
   }
 }
 

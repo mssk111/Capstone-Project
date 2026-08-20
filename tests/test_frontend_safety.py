@@ -36,3 +36,14 @@ def test_photo_storage_failure_does_not_block_listing_publish():
     assert 'canvas.toDataURL("image/webp", quality)' in SCRIPT
     assert "The listing was published, but the uploaded photo could not be stored" not in SCRIPT
     assert "Publishing ${listings.length}..." in SCRIPT
+
+
+def test_image_analysis_keeps_loading_state_during_two_second_delay():
+    delay = "await new Promise((resolve) => setTimeout(resolve, 2000));"
+    loading_start = 'sellForm.setAttribute("aria-busy", "true");'
+    loading_end = 'sellForm.removeAttribute("aria-busy");'
+
+    assert loading_start in SCRIPT
+    assert delay in SCRIPT
+    assert loading_end in SCRIPT
+    assert SCRIPT.index(loading_start) < SCRIPT.index(delay) < SCRIPT.index(loading_end)
